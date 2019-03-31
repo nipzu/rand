@@ -49,6 +49,7 @@
 //! | Haiku            | `/dev/random` (identical to `/dev/urandom`)
 //! | Web browsers     | [`Crypto.getRandomValues`][14] (see [Support for WebAssembly and ams.js][14])
 //! | Node.js          | [`crypto.randomBytes`][15] (see [Support for WebAssembly and ams.js][16])
+//! | WASI             | [`__wasi_random_get`][17]
 //!
 //! Rand doesn't have a blanket implementation for all Unix-like operating
 //! systems that reads from `/dev/urandom`. This ensures all supported operating
@@ -65,7 +66,10 @@
 //! methods directly, using either `stdweb` or `wasm-bindgen` depending on what
 //! features are activated for this crate. Note that if both features are
 //! enabled `wasm-bindgen` will be used.
-//!
+//! 
+//! The WASI target `wasm32-unknown-wasi` uses the `__wasi_random_get` 
+//! function defined by the WASI standard.
+//! 
 //! ## Early boot
 //!
 //! It is possible that early in the boot process the OS hasn't had enough time
@@ -119,6 +123,7 @@
 //! [14]: https://www.w3.org/TR/WebCryptoAPI/#Crypto-method-getRandomValues
 //! [15]: https://nodejs.org/api/crypto.html#crypto_crypto_randombytes_size_callback
 //! [16]: #support-for-webassembly-and-amsjs
+//! [17]: https://github.com/CraneStation/wasmtime/blob/master/docs/WASI-api.md#__wasi_random_get
 #![doc(html_logo_url = "https://www.rust-lang.org/logos/rust-logo-128x128-blk.png",
        html_favicon_url = "https://www.rust-lang.org/favicon.ico",
        html_root_url = "https://rust-random.github.io/rand/")]
@@ -133,10 +138,10 @@ pub extern crate rand_core;
 #[macro_use] extern crate log;
 
 // We have to do it here because we load macros
-#[cfg(all(target_arch = "wasm32", not(target_os = "emscripten"),
+#[cfg(all(target_arch = "wasm32", not(target_os = "emscripten"), not(target_env = "wasi"),
           feature = "wasm-bindgen"))]
 extern crate wasm_bindgen;
-#[cfg(all(target_arch = "wasm32", not(target_os = "emscripten"),
+#[cfg(all(target_arch = "wasm32", not(target_os = "emscripten"), not(target_env = "wasi"),
           not(feature = "wasm-bindgen"),
           feature = "stdweb"))]
 #[macro_use] extern crate stdweb;
@@ -313,11 +318,13 @@ mod_use!(cfg(target_os = "redox"), redox);
 mod_use!(cfg(any(target_os = "solaris", target_os = "illumos")), solarish);
 mod_use!(cfg(windows), windows);
 mod_use!(cfg(target_env = "sgx"), sgx);
+mod_use!(cfg(target_env = "wasi"), wasi);
 
 mod_use!(
     cfg(all(
         target_arch = "wasm32",
         not(target_os = "emscripten"),
+        not(target_env = "wasi"),
         feature = "wasm-bindgen"
     )),
     wasm32_bindgen
@@ -327,6 +334,7 @@ mod_use!(
     cfg(all(
         target_arch = "wasm32",
         not(target_os = "emscripten"),
+        not(target_env = "wasi"),
         not(feature = "wasm-bindgen"),
         feature = "stdweb",
     )),
@@ -337,6 +345,7 @@ mod_use!(
 #[cfg(all(
     target_arch = "wasm32",
     not(target_os = "emscripten"),
+    not(target_env = "wasi"),
     not(feature = "wasm-bindgen"),
     not(feature = "stdweb"),
 ))]
@@ -350,7 +359,7 @@ mod imp {
     impl OsRngImpl for OsRng {
         fn new() -> Result<OsRng, Error> {
             Err(Error::new(ErrorKind::Unavailable,
-                "OsRng: support for wasm32 requires emscripten, stdweb or wasm-bindgen"))
+                "OsRng: support for wasm32 requires emscripten, stdweb, wasm-bindgen or WASI"))
         }
 
         fn fill_chunk(&mut self, _dest: &mut [u8]) -> Result<(), Error> {
