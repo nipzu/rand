@@ -27,7 +27,7 @@ impl OsRngImpl for OsRng {
             Ok(())
         } else {
             Err(Error::with_cause(
-                ErrorKind::Unexpected,
+                ErrorKind::Unavailable,
                 "__wasi_random_get failed",
                 std::io::Error::from_raw_os_error(ret as i32),
             ))
